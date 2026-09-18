@@ -329,7 +329,7 @@
   <div class="section-body">
     <h2>Are you coding yet?</h2>
     <div class="editor-wrap disabled" id="editor-wrap">
-      <textarea id="python-editor">def greet(name)
+      <textarea id="python-editor">def greet(name):
     print("hello, " + name)
 
 greet("world")
@@ -794,43 +794,43 @@ except (ValueError, OverflowError) as e:
     eye_openness: 4, mouth_openness: 4, mouth_width_ratio: 4, smile_score: 4,
   };
 
+  // "hands not raised"/"hands not near face" (target value 0) can't actually
+  // be confirmed when no hands are visible at all — that's a missing
+  // observation, not a match. Skipping those two keys in that case (instead
+  // of scoring them as a free perfect match) stops a plain neutral face
+  // with hands out of frame from trivially satisfying praying/shocked's
+  // hand_raised=0 + hand_near_face=0 targets. A target value of 1 (flex's
+  // hand_raised, unbothered/wink's hand_near_face) is left alone — those
+  // already correctly score low when no hands are present, since "hand
+  // required but absent" is a real mismatch.
+  const HAND_KEYS = new Set(['hand_raised', 'hand_near_face']);
+
   function computeSimilarity(features, target) {
-    let score = 0;
+    let score = 0, count = 0;
     for (const key of Object.keys(target)) {
+      if (HAND_KEYS.has(key) && features.num_hands === 0 && target[key] === 0) continue;
       const w = FEATURE_WEIGHTS[key] ?? 0;
       const factor = FEATURE_FACTORS[key] ?? FEATURE_FACTORS.default;
       score += w * Math.exp(-Math.abs(features[key] - target[key]) * factor);
+      count++;
     }
-    return score;
+    return { score, count };
   }
 
-  // Score normalized to a 0-1 "confidence" (raw score / number of weighted
-  // keys in that target) so memes with different key counts are comparable,
-  // and so we can require a minimum confidence before showing any match at
-  // all — without this, a neutral face always got forced into whichever of
-  // the memes was mathematically least-wrong, even when none applied.
-  //
-  // 0.55 was too low: praying and shocked both target hand_raised=0 AND
-  // hand_near_face=0, so a neutral face with hands simply out of frame
-  // trivially "matches" both those binary features perfectly (worth half
-  // of a 4-key target's max score) regardless of actual eyes/mouth state —
-  // confirmed live at 0.767 confidence for "praying" on a plain neutral
-  // face. Raised well above that observed false-positive floor; a genuine
-  // held pose (eyes actually closed, mouth actually wide open, etc.) scores
-  // much closer to the ~0.9+ ceiling since every key is a real match, not
-  // just the "no hands visible" freebie.
-  const MATCH_CONFIDENCE_THRESHOLD = 0.85;
+  // Score normalized to a 0-1 "confidence" (raw score / number of keys
+  // actually evaluated this frame — see HAND_KEYS above for why that count
+  // can vary) so memes with different key counts are comparable, and so we
+  // can require a minimum confidence before showing any match at all.
+  const MATCH_CONFIDENCE_THRESHOLD = 0.65;
 
   function findBestMatch(features) {
-    // Compare by confidence (score normalized per target's own key count),
-    // not raw summed score — targets have different numbers of keys (e.g.
-    // flex/wink-smirk use 3, praying/unbothered/shocked/pondering use 4),
-    // so raw score structurally favors targets with more keys regardless
-    // of how well the pose actually matches.
+    // Compare by confidence (normalized), not raw summed score — targets
+    // have different numbers of keys, so raw score structurally favors
+    // targets with more keys regardless of how well the pose matches.
     let best = null, bestScore = -Infinity, bestConfidence = -Infinity;
     for (const entry of MOOD_TARGETS) {
-      const score = computeSimilarity(features, entry.target);
-      const confidence = score / Object.keys(entry.target).length;
+      const { score, count } = computeSimilarity(features, entry.target);
+      const confidence = score / count;
       if (confidence > bestConfidence) { bestScore = score; best = entry; bestConfidence = confidence; }
     }
     if (bestConfidence < MATCH_CONFIDENCE_THRESHOLD) {
@@ -844,20 +844,8 @@ except (ValueError, OverflowError) as e:
   let pendingMatchSince = 0;
   let displayedMatchName = null;
 
-  let lastDebugLog = 0;
   function updateMoodMatch(features) {
     const { best, score, confidence } = findBestMatch(features);
-
-    // TEMP diagnostic — remove once the shocked-not-detected issue is
-    // pinned down. Throttled so it doesn't spam the console.
-    const nowLog = performance.now();
-    if (nowLog - lastDebugLog > 500) {
-      lastDebugLog = nowLog;
-      console.log(MOOD_TARGETS.map(t => {
-        const s = computeSimilarity(features, t.target);
-        return `${t.name}: ${(s / Object.keys(t.target).length).toFixed(3)}`;
-      }).join(' | '));
-    }
 
     const now = performance.now();
     const matchName = best ? best.name : null; // null = no confident match this frame
