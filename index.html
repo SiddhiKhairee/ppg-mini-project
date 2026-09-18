@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meme Machine</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, sans-serif;
+    background: #111;
+    color: #eee;
+    min-height: 100vh;
+  }
+  .view {
+    display: none;
+    min-height: 100vh;
+    padding: 2rem 1.5rem;
+  }
+  .view.active {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* --- Home / title card --- */
+  #home {
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 2rem;
+  }
+  #home h1 {
+    font-size: 2.5rem;
+    margin: 0;
+  }
+  #home .tagline {
+    color: #999;
+    margin-top: -1.5rem;
+  }
+  .menu-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    width: 280px;
+  }
+  .menu-buttons button {
+    font-size: 1.1rem;
+    padding: 1rem;
+    border-radius: 10px;
+    border: 1px solid #444;
+    background: #222;
+    color: #eee;
+    cursor: pointer;
+  }
+  .menu-buttons button:hover {
+    background: #2c2c2c;
+    border-color: #4a4af0;
+  }
+
+  /* --- Section shell --- */
+  .back-btn {
+    align-self: flex-start;
+    background: #222;
+    color: #eee;
+    border: 1px solid #444;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-bottom: 1.5rem;
+  }
+  .section-body {
+    max-width: 700px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  /* --- Camera sections --- */
+  .camera-status {
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    border-radius: 6px;
+    background: #1b1b1b;
+  }
+  #camera-preview-wrap {
+    position: relative;
+    width: 100%;
+    max-width: 640px;
+  }
+  video, canvas {
+    width: 100%;
+    display: block;
+    border-radius: 8px;
+    background: #000;
+    transform: scaleX(-1);
+  }
+
+  /* --- Fake IDE panel --- */
+  .fake-ide {
+    display: flex;
+    background: #1e1e1e;
+    border: 1px solid #333;
+    border-radius: 8px;
+    overflow: hidden;
+    font-family: "Consolas", "Menlo", monospace;
+    min-height: 320px;
+  }
+  .fake-ide .gutter {
+    background: #181818;
+    color: #555;
+    padding: 1rem 0.75rem;
+    text-align: right;
+    user-select: none;
+    line-height: 1.6;
+  }
+  .fake-ide .code-area {
+    padding: 1rem;
+    color: #d4d4d4;
+    line-height: 1.6;
+    flex: 1;
+    white-space: pre;
+  }
+  .fake-ide .comment { color: #6a9955; }
+</style>
+</head>
+<body>
+
+<!-- Home / title card -->
+<div id="home" class="view active">
+  <h1>Meme Machine</h1>
+  <p class="tagline">placeholder tagline goes here</p>
+  <div class="menu-buttons">
+    <button data-target="section-mood" data-needs-camera>what do you meme?</button>
+    <button data-target="section-editor">Are you coding yet?</button>
+    <button data-target="section-counter" data-needs-camera>its 6 7 time</button>
+  </div>
+</div>
+
+<!-- Mood Meme -->
+<div id="section-mood" class="view">
+  <button class="back-btn" data-back>← back</button>
+  <div class="section-body">
+    <h2>what do you meme?</h2>
+    <div class="camera-status" id="camera-status-mood"></div>
+    <div id="camera-preview-wrap-mood" class="camera-preview-wrap"></div>
+  </div>
+</div>
+
+<!-- Vibe Check Editor -->
+<div id="section-editor" class="view">
+  <button class="back-btn" data-back>← back</button>
+  <div class="section-body">
+    <h2>Are you coding yet?</h2>
+    <div class="fake-ide">
+      <div class="gutter">1<br>2<br>3<br>4<br>5</div>
+      <div class="code-area"><span class="comment">// editor goes here (Phase 1)</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- 6-7 Counter -->
+<div id="section-counter" class="view">
+  <button class="back-btn" data-back>← back</button>
+  <div class="section-body">
+    <h2>its 6 7 time</h2>
+    <div class="camera-status" id="camera-status-counter"></div>
+    <div id="camera-preview-wrap-counter" class="camera-preview-wrap"></div>
+  </div>
+</div>
+
+<script>
+  // --- View switching ---
+  const views = document.querySelectorAll('.view');
+
+  function showView(id) {
+    views.forEach(v => v.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  }
+
+  document.querySelectorAll('.menu-buttons button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      showView(btn.dataset.target);
+      if (btn.dataset.needsCamera !== undefined) {
+        const statusId = btn.dataset.target === 'section-mood' ? 'camera-status-mood' : 'camera-status-counter';
+        const wrapId = btn.dataset.target === 'section-mood' ? 'camera-preview-wrap-mood' : 'camera-preview-wrap-counter';
+        initCamera(statusId, wrapId);
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-back]').forEach(btn => {
+    btn.addEventListener('click', () => showView('home'));
+  });
+
+  // --- Shared camera pipeline ---
+  // One real <video>/<canvas> pair, moved into whichever section requests it,
+  // so we never open two camera streams at once.
+  const video = document.createElement('video');
+  video.autoplay = true;
+  video.muted = true;
+  video.playsInline = true;
+  video.style.display = 'none';
+
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+
+  let activeStream = null;
+  let drawLoopToken = 0;
+
+  function mountCameraInto(wrapId) {
+    const wrap = document.getElementById(wrapId);
+    wrap.innerHTML = '';
+    wrap.appendChild(video);
+    wrap.appendChild(canvas);
+  }
+
+  async function initCamera(statusId, wrapId) {
+    const statusEl = document.getElementById(statusId);
+    mountCameraInto(wrapId);
+    statusEl.textContent = 'Requesting camera access…';
+    try {
+      if (!activeStream) {
+        activeStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = activeStream;
+        await new Promise(resolve => {
+          video.addEventListener('loadeddata', resolve, { once: true });
+        });
+      }
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      statusEl.textContent = 'Camera working.';
+      drawLoopToken++;
+      drawLiveLoop(drawLoopToken);
+    } catch (err) {
+      statusEl.textContent = 'Camera access needed for this part. (' + err.message + ')';
+    }
+  }
+
+  function drawLiveLoop(token) {
+    if (token !== drawLoopToken) return; // a newer section took over the shared canvas
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    requestAnimationFrame(() => drawLiveLoop(token));
+  }
+
+</script>
+
+</body>
+</html>
