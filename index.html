@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Meme Machine</title>
+<title>Powerpuff Girls Meme Machine</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/lint/lint.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
@@ -12,12 +12,24 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
 <script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
 <style>
+  :root {
+    --bg: #ffe6f2;
+    --panel-bg: #ffd3e8;
+    --panel-border: #f7aed2;
+    --text: #4a1f3a;
+    --text-muted: #9a5c82;
+    --btn-bg: #f472b6;
+    --btn-bg-hover: #ec4899;
+    --btn-text: #fff0f7;
+    --error-bg: #ffd0da;
+    --error-text: #a3123a;
+  }
   * { box-sizing: border-box; }
   body {
     margin: 0;
     font-family: system-ui, sans-serif;
-    background: #111;
-    color: #eee;
+    background: var(--bg);
+    color: var(--text);
     min-height: 100vh;
   }
   .view {
@@ -37,12 +49,14 @@
     text-align: center;
     gap: 2rem;
   }
-  #home h1 {
-    font-size: 2.5rem;
-    margin: 0;
+  #home-logo {
+    width: 100%;
+    max-width: 360px;
   }
   #home .tagline {
-    color: #999;
+    color: var(--text-muted);
+    font-weight: 600;
+    letter-spacing: 0.02em;
     margin-top: -1.5rem;
   }
   .menu-buttons {
@@ -55,26 +69,28 @@
     font-size: 1.1rem;
     padding: 1rem;
     border-radius: 10px;
-    border: 1px solid #444;
-    background: #222;
-    color: #eee;
+    border: none;
+    background: var(--btn-bg);
+    color: var(--btn-text);
     cursor: pointer;
   }
   .menu-buttons button:hover {
-    background: #2c2c2c;
-    border-color: #4a4af0;
+    background: var(--btn-bg-hover);
   }
 
   /* --- Section shell --- */
   .back-btn {
     align-self: flex-start;
-    background: #222;
-    color: #eee;
-    border: 1px solid #444;
+    background: var(--btn-bg);
+    color: var(--btn-text);
+    border: none;
     padding: 0.5rem 1rem;
     border-radius: 6px;
     cursor: pointer;
     margin-bottom: 1.5rem;
+  }
+  .back-btn:hover {
+    background: var(--btn-bg-hover);
   }
   .section-body {
     max-width: 700px;
@@ -87,11 +103,13 @@
     margin-bottom: 1rem;
     padding: 0.75rem;
     border-radius: 6px;
-    background: #1b1b1b;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
   }
   .camera-status.error {
-    background: #3a1414;
-    color: #ffb3b3;
+    background: var(--error-bg);
+    color: var(--error-text);
+    border-color: var(--error-text);
   }
   #camera-preview-wrap {
     position: relative;
@@ -106,90 +124,58 @@
     transform: scaleX(-1);
   }
 
-  /* --- Mood Meme result panel --- */
-  .mood-result {
+  /* --- Mood Meme layout: camera left, meme right --- */
+  .mood-section-body {
+    max-width: 960px;
+  }
+  .mood-layout {
     display: flex;
-    align-items: center;
-    gap: 1rem;
-    margin-top: 1rem;
-    padding: 0.75rem;
-    background: #1b1b1b;
+    gap: 1.5rem;
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+  .mood-camera-col {
+    flex: 1 1 0;
+    min-width: 280px;
+  }
+  .mood-result-col {
+    flex: 1 1 0;
+    min-width: 280px;
+    display: flex;
+  }
+  .mood-result {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    text-align: center;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
     border-radius: 8px;
+    width: 100%;
+    height: 100%;
+    min-height: 260px;
+    overflow: hidden;
   }
   #mood-result-img {
-    width: 96px;
-    height: 96px;
+    flex: 1;
+    width: 100%;
+    min-height: 0;
     object-fit: cover;
-    border-radius: 8px;
-    background: #000;
+    background: var(--panel-bg);
+  }
+  .mood-result-text {
+    padding: 1rem;
+    background: var(--panel-bg);
   }
   #mood-result-name {
-    font-size: 1.2rem;
-    font-weight: bold;
-  }
-  .mood-result-score {
-    color: #999;
-    font-size: 0.85rem;
-    margin-top: 0.25rem;
-  }
-  .calib-controls {
-    margin-top: 1rem;
-    display: flex;
-    gap: 0.75rem;
-  }
-  .calib-panel {
-    margin-top: 1rem;
-    padding: 1rem;
-    background: #1b1b1b;
-    border-radius: 8px;
-    border: 1px solid #333;
-  }
-  .calib-progress {
-    color: #999;
-    font-size: 0.85rem;
-    margin-bottom: 0.75rem;
-  }
-  .calib-pose {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-  }
-  #calib-pose-img {
-    width: 96px;
-    height: 96px;
-    object-fit: cover;
-    border-radius: 8px;
-    background: #000;
-  }
-  .calib-pose-name {
-    font-size: 1.1rem;
+    font-size: 1.4rem;
     font-weight: bold;
     text-transform: capitalize;
   }
-  .calib-pose-hint {
-    color: #999;
-    font-size: 0.85rem;
+  .mood-result-score {
+    color: var(--text-muted);
+    font-size: 0.9rem;
     margin-top: 0.25rem;
-  }
-  .calib-actions {
-    margin-top: 1rem;
-    display: flex;
-    gap: 0.75rem;
-  }
-  .calib-status {
-    margin-top: 0.75rem;
-    color: #9cdcfe;
-    font-size: 0.85rem;
-  }
-  .mood-debug {
-    margin-top: 1rem;
-    padding: 0.75rem;
-    background: #1b1b1b;
-    border-radius: 8px;
-    font-family: "Consolas", "Menlo", monospace;
-    font-size: 0.78rem;
-    color: #9cdcfe;
-    white-space: pre-wrap;
   }
 
   /* --- Python status badge --- */
@@ -197,23 +183,26 @@
     position: fixed;
     top: 0.75rem;
     right: 1rem;
-    background: #1b1b1b;
-    border: 1px solid #444;
-    color: #ccc;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    color: var(--text);
     padding: 0.4rem 0.8rem;
     border-radius: 6px;
     font-size: 0.85rem;
     z-index: 10;
   }
   #py-status-badge.error {
-    background: #3a1414;
-    border-color: #a33;
-    color: #ffb3b3;
+    background: var(--error-bg);
+    border-color: var(--error-text);
+    color: var(--error-text);
   }
 
   /* --- Vibe Check Editor --- */
+  /* The code editor itself stays dark (standard code-editor convention,
+     and rewriting syntax-highlight colors risks readability) — only the
+     surrounding chrome picks up the site's pastel pink palette. */
   .editor-wrap {
-    border: 1px solid #333;
+    border: 1px solid var(--panel-border);
     border-radius: 8px;
     overflow: hidden;
     min-height: 320px;
@@ -258,36 +247,40 @@
     padding: 0.6rem 1.2rem;
     border-radius: 8px;
     border: none;
-    background: #4a4af0;
-    color: white;
+    background: var(--btn-bg);
+    color: var(--btn-text);
     cursor: pointer;
   }
+  #run-btn:hover:not(:disabled) {
+    background: var(--btn-bg-hover);
+  }
   #run-btn:disabled {
-    background: #333;
-    color: #888;
+    background: var(--panel-border);
+    color: var(--text-muted);
     cursor: not-allowed;
   }
   .run-caption {
     display: block;
     margin-top: 0.4rem;
-    color: #888;
+    color: var(--text-muted);
     font-size: 0.8rem;
   }
   #python-output {
     margin-top: 1rem;
     padding: 0.75rem;
-    background: #1b1b1b;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
     border-radius: 6px;
     min-height: 3rem;
     white-space: pre-wrap;
     font-family: "Consolas", "Menlo", monospace;
     font-size: 0.9rem;
   }
-  #python-output.error { color: #ff8080; }
+  #python-output.error { color: var(--error-text); }
   #error-counter {
     display: block;
     margin-top: 1rem;
-    color: #999;
+    color: var(--text-muted);
     font-size: 0.85rem;
   }
 </style>
@@ -298,8 +291,8 @@
 
 <!-- Home / title card -->
 <div id="home" class="view active">
-  <h1>Meme Machine</h1>
-  <p class="tagline">placeholder tagline goes here</p>
+  <img id="home-logo" src="assets/The_Powerpuff_Girls_logo.svg" alt="The Powerpuff Girls">
+  <p class="tagline">sugar, spice, and everything nice</p>
   <div class="menu-buttons">
     <button data-target="section-mood" data-needs-camera>what do you meme?</button>
     <button data-target="section-editor">Are you coding yet?</button>
@@ -309,42 +302,24 @@
 <!-- Mood Meme -->
 <div id="section-mood" class="view">
   <button class="back-btn" data-back>← back</button>
-  <div class="section-body">
+  <div class="section-body mood-section-body">
     <h2>what do you meme?</h2>
-    <div class="camera-status" id="camera-status-mood"></div>
-    <div id="camera-preview-wrap-mood" class="camera-preview-wrap"></div>
-    <div class="camera-status" id="mood-status">Loading face/hand detection…</div>
-
-    <div class="calib-controls">
-      <button id="calib-start-btn" class="back-btn">🎯 Calibrate my poses</button>
-      <button id="calib-recal-btn" class="back-btn" style="display:none;">🔁 Recalibrate</button>
-    </div>
-
-    <div id="calib-panel" class="calib-panel" style="display:none;">
-      <div id="calib-progress" class="calib-progress"></div>
-      <div class="calib-pose">
-        <img id="calib-pose-img" src="" alt="">
-        <div>
-          <div id="calib-pose-name" class="calib-pose-name"></div>
-          <div id="calib-pose-hint" class="calib-pose-hint"></div>
+    <div class="mood-layout">
+      <div class="mood-camera-col">
+        <div class="camera-status" id="camera-status-mood"></div>
+        <div id="camera-preview-wrap-mood" class="camera-preview-wrap"></div>
+        <div class="camera-status" id="mood-status">Loading face/hand detection…</div>
+      </div>
+      <div class="mood-result-col">
+        <div class="mood-result" id="mood-result">
+          <img id="mood-result-img" src="" alt="" style="display:none;">
+          <div class="mood-result-text">
+            <div id="mood-result-name">—</div>
+            <div id="mood-result-score" class="mood-result-score"></div>
+          </div>
         </div>
       </div>
-      <div class="calib-actions">
-        <button id="calib-capture-btn" class="back-btn">Hold pose &amp; Capture</button>
-        <button id="calib-skip-btn" class="back-btn">Skip (keep default)</button>
-      </div>
-      <div id="calib-status" class="calib-status"></div>
     </div>
-
-    <div class="mood-result" id="mood-result">
-      <img id="mood-result-img" src="" alt="" style="display:none;">
-      <div class="mood-result-text">
-        <div id="mood-result-name">—</div>
-        <div id="mood-result-score" class="mood-result-score"></div>
-      </div>
-    </div>
-    <button id="mood-freeze-btn" class="back-btn">❄️ Freeze numbers</button>
-    <pre id="mood-debug" class="mood-debug"></pre>
   </div>
 </div>
 
@@ -620,13 +595,6 @@ except (ValueError, OverflowError) as e:
   const moodResultImg = document.getElementById('mood-result-img');
   const moodResultName = document.getElementById('mood-result-name');
   const moodResultScore = document.getElementById('mood-result-score');
-  const moodDebugEl = document.getElementById('mood-debug');
-  const moodFreezeBtn = document.getElementById('mood-freeze-btn');
-  let moodDebugFrozen = false;
-  moodFreezeBtn.addEventListener('click', () => {
-    moodDebugFrozen = !moodDebugFrozen;
-    moodFreezeBtn.textContent = moodDebugFrozen ? '▶️ Unfreeze' : '❄️ Freeze numbers';
-  });
 
   let moodLoopToken = 0;
   let lastVideoTime = -1;
@@ -701,7 +669,6 @@ except (ValueError, OverflowError) as e:
         if (face) {
           const features = computeFeatures(face, hands);
           updateMoodMatch(features);
-          if (calibCapturing) sampleCalibrationFrame(features);
         }
       } catch (err) {
         console.error('mood frame detection failed:', err);
@@ -841,8 +808,18 @@ except (ValueError, OverflowError) as e:
   // keys in that target) so memes with different key counts are comparable,
   // and so we can require a minimum confidence before showing any match at
   // all — without this, a neutral face always got forced into whichever of
-  // the 6 memes was mathematically least-wrong, even when none applied.
-  const MATCH_CONFIDENCE_THRESHOLD = 0.55;
+  // the memes was mathematically least-wrong, even when none applied.
+  //
+  // 0.55 was too low: praying and shocked both target hand_raised=0 AND
+  // hand_near_face=0, so a neutral face with hands simply out of frame
+  // trivially "matches" both those binary features perfectly (worth half
+  // of a 4-key target's max score) regardless of actual eyes/mouth state —
+  // confirmed live at 0.767 confidence for "praying" on a plain neutral
+  // face. Raised well above that observed false-positive floor; a genuine
+  // held pose (eyes actually closed, mouth actually wide open, etc.) scores
+  // much closer to the ~0.9+ ceiling since every key is a real match, not
+  // just the "no hands visible" freebie.
+  const MATCH_CONFIDENCE_THRESHOLD = 0.85;
 
   function findBestMatch(features) {
     // Compare by confidence (score normalized per target's own key count),
@@ -867,25 +844,19 @@ except (ValueError, OverflowError) as e:
   let pendingMatchSince = 0;
   let displayedMatchName = null;
 
+  let lastDebugLog = 0;
   function updateMoodMatch(features) {
     const { best, score, confidence } = findBestMatch(features);
 
-    // Live debug readout — for calibrating targets/weights against real
-    // observed values instead of guesses. Freezable via the button, since
-    // posing and reading/copying numbers at the same time isn't possible
-    // with a constantly-updating live feed. Runs regardless of whether a
-    // confident match was found, since "no match" cases need debugging too.
-    if (!moodDebugFrozen) {
-      const featLines = Object.entries(features)
-        .map(([k, v]) => `${k}: ${typeof v === 'number' ? v.toFixed(3) : v}`)
-        .join('\n');
-      const scoreLines = MOOD_TARGETS
-        .map(t => {
-          const s = computeSimilarity(features, t.target);
-          return `${t.name}: ${s.toFixed(3)} (confidence ${(s / Object.keys(t.target).length).toFixed(3)})`;
-        })
-        .join('\n');
-      moodDebugEl.textContent = `-- features --\n${featLines}\n\n-- scores --\n${scoreLines}`;
+    // TEMP diagnostic — remove once the shocked-not-detected issue is
+    // pinned down. Throttled so it doesn't spam the console.
+    const nowLog = performance.now();
+    if (nowLog - lastDebugLog > 500) {
+      lastDebugLog = nowLog;
+      console.log(MOOD_TARGETS.map(t => {
+        const s = computeSimilarity(features, t.target);
+        return `${t.name}: ${(s / Object.keys(t.target).length).toFixed(3)}`;
+      }).join(' | '));
     }
 
     const now = performance.now();
@@ -913,30 +884,11 @@ except (ValueError, OverflowError) as e:
     }
   }
 
-  // --- Mood Meme calibration ---
-  // Replaces the hand-guessed MOOD_TARGETS values with real measurements of
-  // your own face/hands per pose, captured live — see plan.md Phase 2 notes
-  // ("these are starting guesses, not measurements"). Only the target
-  // *values* are overwritten; FEATURE_WEIGHTS/FEATURE_FACTORS and the
-  // confidence-threshold math are untouched.
+  // Applies the pose measurements captured earlier via the (now-removed)
+  // calibration flow, still saved in localStorage from that session — see
+  // plan.md Phase 2 notes. Only overwrites the target *values* already in
+  // MOOD_TARGETS; falls back to the hard-coded defaults if nothing's saved.
   const CALIB_STORAGE_KEY = 'moodMemeCalibration';
-  const CALIB_CAPTURE_MS = 1500;
-
-  let calibIndex = 0;
-  let calibCapturing = false;
-  let calibCaptureStart = 0;
-  let calibSamples = [];
-
-  const calibStartBtn = document.getElementById('calib-start-btn');
-  const calibRecalBtn = document.getElementById('calib-recal-btn');
-  const calibPanel = document.getElementById('calib-panel');
-  const calibProgressEl = document.getElementById('calib-progress');
-  const calibImgEl = document.getElementById('calib-pose-img');
-  const calibNameEl = document.getElementById('calib-pose-name');
-  const calibHintEl = document.getElementById('calib-pose-hint');
-  const calibCaptureBtn = document.getElementById('calib-capture-btn');
-  const calibSkipBtn = document.getElementById('calib-skip-btn');
-  const calibStatusEl = document.getElementById('calib-status');
 
   function loadCalibration() {
     try {
@@ -946,96 +898,10 @@ except (ValueError, OverflowError) as e:
       for (const entry of MOOD_TARGETS) {
         if (saved[entry.name]) Object.assign(entry.target, saved[entry.name]);
       }
-      calibRecalBtn.style.display = 'inline-block';
     } catch (err) {
       console.error('failed to load saved calibration:', err);
     }
   }
-
-  function saveCalibration() {
-    const out = {};
-    for (const entry of MOOD_TARGETS) out[entry.name] = entry.target;
-    localStorage.setItem(CALIB_STORAGE_KEY, JSON.stringify(out));
-  }
-
-  function startCalibration() {
-    calibIndex = 0;
-    calibPanel.style.display = 'block';
-    showCalibStep();
-  }
-
-  function showCalibStep() {
-    calibCapturing = false;
-    calibSamples = [];
-    const entry = MOOD_TARGETS[calibIndex];
-    calibProgressEl.textContent = `Pose ${calibIndex + 1} of ${MOOD_TARGETS.length}: ${entry.name}`;
-    calibImgEl.src = entry.img;
-    calibNameEl.textContent = entry.name;
-    calibHintEl.textContent = entry.hint;
-    calibCaptureBtn.disabled = false;
-    calibCaptureBtn.textContent = 'Hold pose & Capture';
-    calibStatusEl.textContent = '';
-  }
-
-  function beginCapture() {
-    calibSamples = [];
-    calibCaptureStart = performance.now();
-    calibCapturing = true;
-    calibCaptureBtn.disabled = true;
-    calibCaptureBtn.textContent = 'Capturing…';
-    calibStatusEl.textContent = 'Hold the pose…';
-  }
-
-  // Called from moodLoop once per frame while calibCapturing is true, so
-  // sampling reuses the exact same features already being computed for
-  // live matching instead of running detection a second time.
-  function sampleCalibrationFrame(features) {
-    calibSamples.push(features);
-    if (performance.now() - calibCaptureStart >= CALIB_CAPTURE_MS) {
-      finishCapture();
-    }
-  }
-
-  function finishCapture() {
-    calibCapturing = false;
-    const entry = MOOD_TARGETS[calibIndex];
-    if (calibSamples.length === 0) {
-      calibStatusEl.textContent = 'No face detected during capture — try again.';
-      calibCaptureBtn.disabled = false;
-      calibCaptureBtn.textContent = 'Hold pose & Capture';
-      return;
-    }
-    // Only overwrite the keys this pose's target already used, so the
-    // weighting/factor scheme keeps applying to the same feature set.
-    const keys = Object.keys(entry.target);
-    const averaged = {};
-    for (const key of keys) {
-      averaged[key] = calibSamples.reduce((sum, s) => sum + s[key], 0) / calibSamples.length;
-    }
-    entry.target = averaged;
-    calibStatusEl.textContent = 'Captured ✓';
-    advanceCalibStep();
-  }
-
-  function advanceCalibStep() {
-    calibIndex++;
-    if (calibIndex >= MOOD_TARGETS.length) {
-      finishCalibration();
-    } else {
-      showCalibStep();
-    }
-  }
-
-  function finishCalibration() {
-    calibPanel.style.display = 'none';
-    saveCalibration();
-    calibRecalBtn.style.display = 'inline-block';
-  }
-
-  calibStartBtn.addEventListener('click', startCalibration);
-  calibRecalBtn.addEventListener('click', startCalibration);
-  calibCaptureBtn.addEventListener('click', beginCapture);
-  calibSkipBtn.addEventListener('click', advanceCalibStep);
 
   loadCalibration();
 </script>
