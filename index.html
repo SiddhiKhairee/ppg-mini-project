@@ -89,6 +89,10 @@
     border-radius: 6px;
     background: #1b1b1b;
   }
+  .camera-status.error {
+    background: #3a1414;
+    color: #ffb3b3;
+  }
   #camera-preview-wrap {
     position: relative;
     width: 100%;
@@ -100,6 +104,92 @@
     border-radius: 8px;
     background: #000;
     transform: scaleX(-1);
+  }
+
+  /* --- Mood Meme result panel --- */
+  .mood-result {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 1rem;
+    padding: 0.75rem;
+    background: #1b1b1b;
+    border-radius: 8px;
+  }
+  #mood-result-img {
+    width: 96px;
+    height: 96px;
+    object-fit: cover;
+    border-radius: 8px;
+    background: #000;
+  }
+  #mood-result-name {
+    font-size: 1.2rem;
+    font-weight: bold;
+  }
+  .mood-result-score {
+    color: #999;
+    font-size: 0.85rem;
+    margin-top: 0.25rem;
+  }
+  .calib-controls {
+    margin-top: 1rem;
+    display: flex;
+    gap: 0.75rem;
+  }
+  .calib-panel {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: #1b1b1b;
+    border-radius: 8px;
+    border: 1px solid #333;
+  }
+  .calib-progress {
+    color: #999;
+    font-size: 0.85rem;
+    margin-bottom: 0.75rem;
+  }
+  .calib-pose {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  #calib-pose-img {
+    width: 96px;
+    height: 96px;
+    object-fit: cover;
+    border-radius: 8px;
+    background: #000;
+  }
+  .calib-pose-name {
+    font-size: 1.1rem;
+    font-weight: bold;
+    text-transform: capitalize;
+  }
+  .calib-pose-hint {
+    color: #999;
+    font-size: 0.85rem;
+    margin-top: 0.25rem;
+  }
+  .calib-actions {
+    margin-top: 1rem;
+    display: flex;
+    gap: 0.75rem;
+  }
+  .calib-status {
+    margin-top: 0.75rem;
+    color: #9cdcfe;
+    font-size: 0.85rem;
+  }
+  .mood-debug {
+    margin-top: 1rem;
+    padding: 0.75rem;
+    background: #1b1b1b;
+    border-radius: 8px;
+    font-family: "Consolas", "Menlo", monospace;
+    font-size: 0.78rem;
+    color: #9cdcfe;
+    white-space: pre-wrap;
   }
 
   /* --- Python status badge --- */
@@ -213,7 +303,6 @@
   <div class="menu-buttons">
     <button data-target="section-mood" data-needs-camera>what do you meme?</button>
     <button data-target="section-editor">Are you coding yet?</button>
-    <button data-target="section-counter" data-needs-camera>its 6 7 time</button>
   </div>
 </div>
 
@@ -224,6 +313,38 @@
     <h2>what do you meme?</h2>
     <div class="camera-status" id="camera-status-mood"></div>
     <div id="camera-preview-wrap-mood" class="camera-preview-wrap"></div>
+    <div class="camera-status" id="mood-status">Loading face/hand detection…</div>
+
+    <div class="calib-controls">
+      <button id="calib-start-btn" class="back-btn">🎯 Calibrate my poses</button>
+      <button id="calib-recal-btn" class="back-btn" style="display:none;">🔁 Recalibrate</button>
+    </div>
+
+    <div id="calib-panel" class="calib-panel" style="display:none;">
+      <div id="calib-progress" class="calib-progress"></div>
+      <div class="calib-pose">
+        <img id="calib-pose-img" src="" alt="">
+        <div>
+          <div id="calib-pose-name" class="calib-pose-name"></div>
+          <div id="calib-pose-hint" class="calib-pose-hint"></div>
+        </div>
+      </div>
+      <div class="calib-actions">
+        <button id="calib-capture-btn" class="back-btn">Hold pose &amp; Capture</button>
+        <button id="calib-skip-btn" class="back-btn">Skip (keep default)</button>
+      </div>
+      <div id="calib-status" class="calib-status"></div>
+    </div>
+
+    <div class="mood-result" id="mood-result">
+      <img id="mood-result-img" src="" alt="" style="display:none;">
+      <div class="mood-result-text">
+        <div id="mood-result-name">—</div>
+        <div id="mood-result-score" class="mood-result-score"></div>
+      </div>
+    </div>
+    <button id="mood-freeze-btn" class="back-btn">❄️ Freeze numbers</button>
+    <pre id="mood-debug" class="mood-debug"></pre>
   </div>
 </div>
 
@@ -246,16 +367,6 @@ greet("world")
   </div>
 </div>
 
-<!-- 6-7 Counter -->
-<div id="section-counter" class="view">
-  <button class="back-btn" data-back>← back</button>
-  <div class="section-body">
-    <h2>its 6 7 time</h2>
-    <div class="camera-status" id="camera-status-counter"></div>
-    <div id="camera-preview-wrap-counter" class="camera-preview-wrap"></div>
-  </div>
-</div>
-
 <audio id="fahh-audio" src="assets/fahh-sound-effect.mp3" preload="auto"></audio>
 
 <script>
@@ -271,20 +382,24 @@ greet("world")
     btn.addEventListener('click', () => {
       showView(btn.dataset.target);
       if (btn.dataset.needsCamera !== undefined) {
-        const statusId = btn.dataset.target === 'section-mood' ? 'camera-status-mood' : 'camera-status-counter';
-        const wrapId = btn.dataset.target === 'section-mood' ? 'camera-preview-wrap-mood' : 'camera-preview-wrap-counter';
-        initCamera(statusId, wrapId);
+        initCamera('camera-status-mood', 'camera-preview-wrap-mood');
       }
       if (btn.dataset.target === 'section-editor') {
         // CodeMirror is created while this section is display:none, so it can't
         // measure the gutter correctly until it's actually visible — refresh here.
         cm.refresh();
       }
+      if (btn.dataset.target === 'section-mood') {
+        initVision();
+      }
     });
   });
 
   document.querySelectorAll('[data-back]').forEach(btn => {
-    btn.addEventListener('click', () => showView('home'));
+    btn.addEventListener('click', () => {
+      showView('home');
+      moodLoopToken++; // stop the mood detection loop when leaving the section
+    });
   });
 
   // --- Shared camera pipeline ---
@@ -493,6 +608,436 @@ except (ValueError, OverflowError) as e:
     }
   }
   bootPyodide();
+
+  // --- Mood Meme (face/hand expression matching) ---
+  const EPS = 1e-6;
+  // Was 1.3 — confirmed too loose live (hands joined at chest registered as
+  // "near face"). Tightened to require genuine chin/mouth proximity.
+  const HAND_NEAR_THRESHOLD = 0.6; // multiples of interocular distance
+
+  let faceLandmarker = null, handLandmarker = null, visionReady = false;
+  const moodStatusEl = document.getElementById('mood-status');
+  const moodResultImg = document.getElementById('mood-result-img');
+  const moodResultName = document.getElementById('mood-result-name');
+  const moodResultScore = document.getElementById('mood-result-score');
+  const moodDebugEl = document.getElementById('mood-debug');
+  const moodFreezeBtn = document.getElementById('mood-freeze-btn');
+  let moodDebugFrozen = false;
+  moodFreezeBtn.addEventListener('click', () => {
+    moodDebugFrozen = !moodDebugFrozen;
+    moodFreezeBtn.textContent = moodDebugFrozen ? '▶️ Unfreeze' : '❄️ Freeze numbers';
+  });
+
+  let moodLoopToken = 0;
+  let lastVideoTime = -1;
+
+  async function initVision() {
+    if (visionReady || moodStatusEl.dataset.failed) return;
+    moodStatusEl.textContent = 'Loading face/hand detection…';
+    moodStatusEl.classList.remove('error');
+    try {
+      const { FaceLandmarker, HandLandmarker, FilesetResolver } =
+        await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1');
+
+      const vision = await FilesetResolver.forVisionTasks(
+        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm'
+      );
+
+      async function createLandmarker(Ctor, modelUrl, extraOpts) {
+        try {
+          return await Ctor.createFromOptions(vision, {
+            baseOptions: { modelAssetPath: modelUrl, delegate: 'GPU' },
+            runningMode: 'VIDEO',
+            ...extraOpts,
+          });
+        } catch (err) {
+          // GPU delegate can fail on some machines/browsers — fall back to CPU once.
+          return await Ctor.createFromOptions(vision, {
+            baseOptions: { modelAssetPath: modelUrl, delegate: 'CPU' },
+            runningMode: 'VIDEO',
+            ...extraOpts,
+          });
+        }
+      }
+
+      faceLandmarker = await createLandmarker(FaceLandmarker,
+        'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+        { numFaces: 1, outputFaceBlendshapes: false });
+      handLandmarker = await createLandmarker(HandLandmarker,
+        'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+        { numHands: 2 });
+
+      visionReady = true;
+      moodStatusEl.textContent = 'Ready';
+      moodLoopToken++;
+      // Scheduled via rAF rather than called directly, so a runtime error on
+      // the first detected frame (e.g. the camera stream not fully ready
+      // yet) can't bubble up into this function's own try/catch and get
+      // misreported as a model-loading failure.
+      requestAnimationFrame(() => moodLoop(moodLoopToken));
+    } catch (err) {
+      console.error('initVision failed:', err);
+      moodStatusEl.textContent = 'Failed to load face detection — reload the page (' + err.message + ')';
+      moodStatusEl.dataset.failed = 'true';
+      moodStatusEl.classList.add('error');
+    }
+  }
+
+  function moodLoop(token) {
+    if (token !== moodLoopToken || !visionReady) return;
+    // The camera stream may not have a real frame yet (permission still
+    // settling, or the video briefly reports 0x0) — detectForVideo throws on
+    // a zero-size frame, so skip until the video actually has dimensions.
+    if (video.videoWidth > 0 && video.videoHeight > 0 && video.currentTime !== lastVideoTime) {
+      lastVideoTime = video.currentTime;
+      try {
+        const nowMs = performance.now();
+        const faceResult = faceLandmarker.detectForVideo(video, nowMs);
+        const handResult = handLandmarker.detectForVideo(video, nowMs);
+        // FaceLandmarkerResult uses `.faceLandmarks`; HandLandmarkerResult uses
+        // plain `.landmarks` (not `.handLandmarks`) — verified against the API.
+        const face = faceResult.faceLandmarks[0];
+        const hands = handResult.landmarks;
+        if (face) {
+          const features = computeFeatures(face, hands);
+          updateMoodMatch(features);
+          if (calibCapturing) sampleCalibrationFrame(features);
+        }
+      } catch (err) {
+        console.error('mood frame detection failed:', err);
+      }
+    }
+    requestAnimationFrame(() => moodLoop(token));
+  }
+
+  function dist(a, b) {
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+
+  const RIGHT_EYE = [33, 160, 158, 133, 153, 144];   // [outer, upper1, upper2, inner, lower2, lower1]
+  const LEFT_EYE = [362, 385, 387, 263, 373, 380];
+  const LEFT_EYEBROW = [70, 63, 105, 66, 107];
+  const RIGHT_EYEBROW = [300, 293, 334, 296, 336];
+  const FINGERTIPS = [4, 8, 12, 16, 20];
+
+  function ear(lm, idx) {
+    const [outer, u1, u2, inner, l2, l1] = idx.map(i => lm[i]);
+    return (dist(u1, l1) + dist(u2, l2)) / (2 * dist(outer, inner) + EPS);
+  }
+
+  function meanY(lm, idx) {
+    return idx.reduce((sum, i) => sum + lm[i].y, 0) / idx.length;
+  }
+
+  function computeFeatures(face, hands) {
+    const leftEAR = ear(face, LEFT_EYE);
+    const rightEAR = ear(face, RIGHT_EYE);
+    const eye_openness = (leftEAR + rightEAR) / 2;
+    const eyes_symmetry = Math.abs(leftEAR - rightEAR);
+
+    const mouth_openness = dist(face[13], face[14]) / (dist(face[61], face[291]) + EPS);
+    const mouth_width_ratio = dist(face[78], face[308]) / (dist(face[61], face[291]) + EPS);
+
+    const interocular = dist(face[33], face[263]) + EPS;
+
+    const leftBrowRaise = meanY(face, LEFT_EYE) - meanY(face, LEFT_EYEBROW);
+    const rightBrowRaise = meanY(face, RIGHT_EYE) - meanY(face, RIGHT_EYEBROW);
+    const eyebrow_height = ((leftBrowRaise + rightBrowRaise) / 2) / interocular;
+    const brow_symmetry = Math.abs(leftBrowRaise - rightBrowRaise) / interocular;
+
+    const mouthCenter = {
+      x: (face[61].x + face[291].x + face[13].x + face[14].x) / 4,
+      y: (face[61].y + face[291].y + face[13].y + face[14].y) / 4,
+    };
+    const mouth_elevation = (face[4].y - mouthCenter.y) / interocular;
+
+    const num_hands = hands.length;
+    const faceTopY = Math.min(...face.map(p => p.y));
+    const chin = face[152];
+    // "Raised" means at or above roughly mid-face height (eye level) — not
+    // literally above the top of your head, which was too strict a bar for
+    // a normal flex/finger-up gesture and meant hand_raised almost never
+    // fired.
+    const raisedThresholdY = faceTopY + 0.5 * (chin.y - faceTopY);
+    let hand_raised = 0, hand_near_face = 0;
+    for (const hand of hands) {
+      if (hand[0].y < raisedThresholdY || hand[12].y < raisedThresholdY) hand_raised = 1;
+      for (const tipIdx of FINGERTIPS) {
+        const tip = hand[tipIdx];
+        if (dist(tip, chin) < HAND_NEAR_THRESHOLD * interocular ||
+            dist(tip, mouthCenter) < HAND_NEAR_THRESHOLD * interocular) {
+          hand_near_face = 1;
+        }
+      }
+    }
+
+    // mouth_width_ratio (inner/outer mouth width) barely moves when you
+    // smile — confirmed live (0.906 at rest, essentially the same while
+    // smiling), since smiling stretches the whole mouth outward rather than
+    // changing that inner/outer proportion. Smiling instead widens the
+    // mouth-corner span relative to the face — measure that against the
+    // interocular scale unit instead.
+    const mouth_span = dist(face[61], face[291]) / interocular;
+    const surprise_score = eye_openness * mouth_openness;
+    const smile_score = mouth_span * (1 - mouth_openness);
+
+    return {
+      eye_openness, eyes_symmetry, mouth_openness, mouth_width_ratio, mouth_span,
+      eyebrow_height, brow_symmetry, mouth_elevation,
+      num_hands, hand_raised, hand_near_face,
+      surprise_score, smile_score,
+    };
+  }
+
+  // Recalibrated against real measured values (neutral face: eye_openness
+  // 0.444, mouth_openness 0.013, eyebrow_height 0.350) — the original
+  // targets were guessed blind and were badly off-scale (e.g. "shocked"
+  // eye_openness was set lower than a normal resting eye actually measures).
+  const MOOD_TARGETS = [
+    { name: 'praying', img: 'assets/praying_monkey.jpg',
+      hint: 'eyes closed + calm mouth + hands together, not raised',
+      target: { eye_openness: 0.15, mouth_openness: 0.05, hand_raised: 0, hand_near_face: 0 } },
+    { name: 'unbothered', img: 'assets/unbothered_lion_chimp.jpg',
+      hint: 'neutral/calm face + hand near chin',
+      target: { eye_openness: 0.42, mouth_openness: 0.08, hand_raised: 0, hand_near_face: 1 } },
+    { name: 'shocked', img: 'assets/shocked_monkey.jpg',
+      hint: 'mouth wide open + eyes wide + hands near chest',
+      target: { eye_openness: 0.55, mouth_openness: 0.4, hand_raised: 0, hand_near_face: 0 } },
+    { name: 'flex / pointing', img: 'assets/flex_pointing_monkey.jpg',
+      hint: 'big smile, teeth showing + one hand raised, finger up',
+      target: { smile_score: 0.6, mouth_openness: 0.08, hand_raised: 1 } },
+  ];
+
+  // eyes_symmetry/eyebrow_height dropped — only used by wink-smirk/pondering,
+  // cut from MOOD_TARGETS below (see plan.md Phase 2 deviation note).
+  const FEATURE_WEIGHTS = {
+    eye_openness: 1, mouth_openness: 1, mouth_width_ratio: 1,
+    hand_raised: 1, hand_near_face: 1,
+    smile_score: 1, surprise_score: 0,
+    num_hands: 0, mouth_elevation: 0, brow_symmetry: 0,
+  };
+  // Continuous features get a much sharper factor than binary ones. At
+  // factor=1, a 0/1 binary mismatch (exp(-1)=0.37) swung the score far more
+  // than a real expression difference on a 0-0.5-ish continuous feature
+  // (exp(-0.3)=0.74) — so hand position was overpowering facial expression
+  // entirely. Binary features are already maximally sharp at factor=1 (their
+  // only possible distances are 0 or 1), so they're left alone.
+  const FEATURE_FACTORS = {
+    default: 1,
+    eye_openness: 4, mouth_openness: 4, mouth_width_ratio: 4, smile_score: 4,
+  };
+
+  function computeSimilarity(features, target) {
+    let score = 0;
+    for (const key of Object.keys(target)) {
+      const w = FEATURE_WEIGHTS[key] ?? 0;
+      const factor = FEATURE_FACTORS[key] ?? FEATURE_FACTORS.default;
+      score += w * Math.exp(-Math.abs(features[key] - target[key]) * factor);
+    }
+    return score;
+  }
+
+  // Score normalized to a 0-1 "confidence" (raw score / number of weighted
+  // keys in that target) so memes with different key counts are comparable,
+  // and so we can require a minimum confidence before showing any match at
+  // all — without this, a neutral face always got forced into whichever of
+  // the 6 memes was mathematically least-wrong, even when none applied.
+  const MATCH_CONFIDENCE_THRESHOLD = 0.55;
+
+  function findBestMatch(features) {
+    // Compare by confidence (score normalized per target's own key count),
+    // not raw summed score — targets have different numbers of keys (e.g.
+    // flex/wink-smirk use 3, praying/unbothered/shocked/pondering use 4),
+    // so raw score structurally favors targets with more keys regardless
+    // of how well the pose actually matches.
+    let best = null, bestScore = -Infinity, bestConfidence = -Infinity;
+    for (const entry of MOOD_TARGETS) {
+      const score = computeSimilarity(features, entry.target);
+      const confidence = score / Object.keys(entry.target).length;
+      if (confidence > bestConfidence) { bestScore = score; best = entry; bestConfidence = confidence; }
+    }
+    if (bestConfidence < MATCH_CONFIDENCE_THRESHOLD) {
+      return { best: null, score: bestScore, confidence: bestConfidence };
+    }
+    return { best, score: bestScore, confidence: bestConfidence };
+  }
+
+  const MOOD_HOLD_MS = 500;
+  let pendingMatchName = null;
+  let pendingMatchSince = 0;
+  let displayedMatchName = null;
+
+  function updateMoodMatch(features) {
+    const { best, score, confidence } = findBestMatch(features);
+
+    // Live debug readout — for calibrating targets/weights against real
+    // observed values instead of guesses. Freezable via the button, since
+    // posing and reading/copying numbers at the same time isn't possible
+    // with a constantly-updating live feed. Runs regardless of whether a
+    // confident match was found, since "no match" cases need debugging too.
+    if (!moodDebugFrozen) {
+      const featLines = Object.entries(features)
+        .map(([k, v]) => `${k}: ${typeof v === 'number' ? v.toFixed(3) : v}`)
+        .join('\n');
+      const scoreLines = MOOD_TARGETS
+        .map(t => {
+          const s = computeSimilarity(features, t.target);
+          return `${t.name}: ${s.toFixed(3)} (confidence ${(s / Object.keys(t.target).length).toFixed(3)})`;
+        })
+        .join('\n');
+      moodDebugEl.textContent = `-- features --\n${featLines}\n\n-- scores --\n${scoreLines}`;
+    }
+
+    const now = performance.now();
+    const matchName = best ? best.name : null; // null = no confident match this frame
+
+    if (matchName !== pendingMatchName) {
+      pendingMatchName = matchName;
+      pendingMatchSince = now;
+    }
+
+    if (matchName !== displayedMatchName && (now - pendingMatchSince) >= MOOD_HOLD_MS) {
+      displayedMatchName = matchName;
+      if (best) {
+        moodResultImg.src = best.img;
+        moodResultImg.style.display = 'block';
+        moodResultName.textContent = best.name;
+      } else {
+        moodResultImg.style.display = 'none';
+        moodResultName.textContent = '— no clear match —';
+        moodResultScore.textContent = '';
+      }
+    }
+    if (best && displayedMatchName === best.name) {
+      moodResultScore.textContent = `match score: ${score.toFixed(3)} (confidence ${confidence.toFixed(3)})`;
+    }
+  }
+
+  // --- Mood Meme calibration ---
+  // Replaces the hand-guessed MOOD_TARGETS values with real measurements of
+  // your own face/hands per pose, captured live — see plan.md Phase 2 notes
+  // ("these are starting guesses, not measurements"). Only the target
+  // *values* are overwritten; FEATURE_WEIGHTS/FEATURE_FACTORS and the
+  // confidence-threshold math are untouched.
+  const CALIB_STORAGE_KEY = 'moodMemeCalibration';
+  const CALIB_CAPTURE_MS = 1500;
+
+  let calibIndex = 0;
+  let calibCapturing = false;
+  let calibCaptureStart = 0;
+  let calibSamples = [];
+
+  const calibStartBtn = document.getElementById('calib-start-btn');
+  const calibRecalBtn = document.getElementById('calib-recal-btn');
+  const calibPanel = document.getElementById('calib-panel');
+  const calibProgressEl = document.getElementById('calib-progress');
+  const calibImgEl = document.getElementById('calib-pose-img');
+  const calibNameEl = document.getElementById('calib-pose-name');
+  const calibHintEl = document.getElementById('calib-pose-hint');
+  const calibCaptureBtn = document.getElementById('calib-capture-btn');
+  const calibSkipBtn = document.getElementById('calib-skip-btn');
+  const calibStatusEl = document.getElementById('calib-status');
+
+  function loadCalibration() {
+    try {
+      const raw = localStorage.getItem(CALIB_STORAGE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      for (const entry of MOOD_TARGETS) {
+        if (saved[entry.name]) Object.assign(entry.target, saved[entry.name]);
+      }
+      calibRecalBtn.style.display = 'inline-block';
+    } catch (err) {
+      console.error('failed to load saved calibration:', err);
+    }
+  }
+
+  function saveCalibration() {
+    const out = {};
+    for (const entry of MOOD_TARGETS) out[entry.name] = entry.target;
+    localStorage.setItem(CALIB_STORAGE_KEY, JSON.stringify(out));
+  }
+
+  function startCalibration() {
+    calibIndex = 0;
+    calibPanel.style.display = 'block';
+    showCalibStep();
+  }
+
+  function showCalibStep() {
+    calibCapturing = false;
+    calibSamples = [];
+    const entry = MOOD_TARGETS[calibIndex];
+    calibProgressEl.textContent = `Pose ${calibIndex + 1} of ${MOOD_TARGETS.length}: ${entry.name}`;
+    calibImgEl.src = entry.img;
+    calibNameEl.textContent = entry.name;
+    calibHintEl.textContent = entry.hint;
+    calibCaptureBtn.disabled = false;
+    calibCaptureBtn.textContent = 'Hold pose & Capture';
+    calibStatusEl.textContent = '';
+  }
+
+  function beginCapture() {
+    calibSamples = [];
+    calibCaptureStart = performance.now();
+    calibCapturing = true;
+    calibCaptureBtn.disabled = true;
+    calibCaptureBtn.textContent = 'Capturing…';
+    calibStatusEl.textContent = 'Hold the pose…';
+  }
+
+  // Called from moodLoop once per frame while calibCapturing is true, so
+  // sampling reuses the exact same features already being computed for
+  // live matching instead of running detection a second time.
+  function sampleCalibrationFrame(features) {
+    calibSamples.push(features);
+    if (performance.now() - calibCaptureStart >= CALIB_CAPTURE_MS) {
+      finishCapture();
+    }
+  }
+
+  function finishCapture() {
+    calibCapturing = false;
+    const entry = MOOD_TARGETS[calibIndex];
+    if (calibSamples.length === 0) {
+      calibStatusEl.textContent = 'No face detected during capture — try again.';
+      calibCaptureBtn.disabled = false;
+      calibCaptureBtn.textContent = 'Hold pose & Capture';
+      return;
+    }
+    // Only overwrite the keys this pose's target already used, so the
+    // weighting/factor scheme keeps applying to the same feature set.
+    const keys = Object.keys(entry.target);
+    const averaged = {};
+    for (const key of keys) {
+      averaged[key] = calibSamples.reduce((sum, s) => sum + s[key], 0) / calibSamples.length;
+    }
+    entry.target = averaged;
+    calibStatusEl.textContent = 'Captured ✓';
+    advanceCalibStep();
+  }
+
+  function advanceCalibStep() {
+    calibIndex++;
+    if (calibIndex >= MOOD_TARGETS.length) {
+      finishCalibration();
+    } else {
+      showCalibStep();
+    }
+  }
+
+  function finishCalibration() {
+    calibPanel.style.display = 'none';
+    saveCalibration();
+    calibRecalBtn.style.display = 'inline-block';
+  }
+
+  calibStartBtn.addEventListener('click', startCalibration);
+  calibRecalBtn.addEventListener('click', startCalibration);
+  calibCaptureBtn.addEventListener('click', beginCapture);
+  calibSkipBtn.addEventListener('click', advanceCalibStep);
+
+  loadCalibration();
 </script>
 
 </body>

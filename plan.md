@@ -1,14 +1,15 @@
 # Meme Machine — Build Plan
 
-One self-contained HTML page (`index.html`), no backend, no build step. Three
-features stitched together with a shared shell. Built and tested in the
-phase order below so there's always something demoable.
+One self-contained HTML page (`index.html`), no backend, no build step. Two
+features stitched together with a shared shell (originally scoped as three —
+see Phase 3's cut note below). Built and tested in the phase order below so
+there's always something demoable.
 
 Stack: vanilla HTML/CSS/JS, MediaPipe Tasks Vision (FaceLandmarker +
 HandLandmarker, loaded from CDN, runs entirely client-side), CodeMirror
-(CDN) for the editor, Acorn (CDN) for JS syntax checking, Web Audio API for
-the error sound. Everything runs in the browser off `getUserMedia` — no
-server, no API keys, no model training.
+(CDN) for the editor, Pyodide for Python syntax/execution, a user-provided
+MP3 for the error sound. Everything runs in the browser off `getUserMedia`
+— no server, no API keys, no model training.
 
 ---
 
@@ -161,14 +162,22 @@ real output, and shows a real traceback for runtime (non-syntax) errors.
 ---
 ## Phase 2 — Mood Meme (face expression → meme image) (~1.5–2 hrs)
 
-Ported from a reference implementation (github.com/kristelTech/make_me_a_meme,
-Python/OpenCV) rather than built from scratch — its feature-extraction and
-similarity-matching approach is better than a hand-tuned threshold table, and
-it's a near-direct port since MediaPipe Tasks Vision (JS) exposes the same
-478 face landmark indices the Python version uses.
+Originally scoped as a port of a reference implementation
+(github.com/kristelTech/make_me_a_meme, Python/OpenCV), but that source repo
+was never actually added to this project's workspace — its exact
+`_compute_features()`/`computeSimilarity()` formulas and `feature_weights`/
+`feature_factors` numbers were never available to copy. What's actually
+implemented is an **original reauthoring** built from this file's own feature
+*descriptions* below (EAR-based eye openness, MAR-based mouth openness, the
+per-image bullet points, etc.), using the same MediaPipe Tasks Vision (JS)
+478-point face landmark indices the Python version would have used. This is
+consistent with this section's own "starting guesses, not measurements"
+framing further down — reauthoring against the spec was judged preferable to
+pulling in the actual unreviewed source repo mid-project.
 
-**Assets: our own 6 images** (`assets/`) — the Gibraltar "reaction monkey"
-meme series, not the source repo's human meme photos:
+**Assets: 4 images** (`assets/`) from the Gibraltar "reaction monkey" meme
+series, not the source repo's human meme photos. Originally scoped as 6 —
+see the deviation note below.
 
 | File | Expression/gesture to detect |
 |---|---|
@@ -176,8 +185,9 @@ meme series, not the source repo's human meme photos:
 | `unbothered_lion_chimp.jpg` | neutral/calm face + hand near chin |
 | `shocked_monkey.jpg` | mouth wide open + eyes wide + hands near chest |
 | `flex_pointing_monkey.jpg` | big smile, teeth showing + one hand raised, finger up |
-| `wink_smirk_monkey.jpg` | one eye closed (wink) + smirk + hand near chin/mouth |
-| `pondering_monkey.jpg` | neutral/curious face + finger touching mouth |
+
+`wink_smirk_monkey.jpg` and `pondering_monkey.jpg` are still in `assets/`
+but no longer wired into `MOOD_TARGETS` — see deviation note below.
 
 **Important deviation from the source repo — tested and confirmed before
 building on it:** the source repo auto-extracts each meme's "feature
@@ -193,29 +203,45 @@ real human face — no issue there). Each meme's target feature vector is
 hand-authored based on what it visually shows, then tuned live against
 your own face during testing.
 
-- [ ] Load `@mediapipe/tasks-vision` from CDN, initialize a `FaceLandmarker`
+- [x] Load `@mediapipe/tasks-vision` from CDN, initialize a `FaceLandmarker`
       (`outputFaceBlendshapes: false` — not needed, we use raw landmarks)
-      and a `HandLandmarker`, both `runningMode: "VIDEO"`.
-- [ ] Port `_compute_features()` to JS as `computeFeatures(faceLandmarks, handResult)`,
-      operating on the same landmark indices as the source repo:
-      - eye-aspect-ratio (EAR) per eye from `LEFT/RIGHT_EYE_UPPER/LOWER`
-        indices, averaged → `eye_openness`, plus `eyes_symmetry` (abs
-        difference between the two).
+      and a `HandLandmarker`, both `runningMode: "VIDEO"`. (Loaded via a
+      dynamic `import()` inside `initVision()`, called the first time the
+      Mood Meme section opens — genuinely lazy, and wrapped in try/catch so
+      a load failure can't take down Phase 0's camera code or Phase 1's
+      Pyodide/editor code sharing the same script tag. Package version
+      `@mediapipe/tasks-vision@1.0.1` and both model asset URLs verified
+      live via `curl` before committing to them. GPU delegate attempted
+      first with a CPU fallback on failure.)
+- [x] Reauthored `computeFeatures(face, hands)` (see the reauthoring note
+      above — not a literal port), operating on canonical MediaPipe face
+      mesh indices:
+      - eye-aspect-ratio (EAR) per eye from six-point index sets, averaged
+        → `eye_openness`, plus `eyes_symmetry` (abs difference between the
+        two). Already scale-invariant (ratio of two face-relative
+        distances) — no extra normalization.
       - mouth-aspect-ratio from landmarks 13/14 (vertical) vs 61/291
         (horizontal) → `mouth_openness`; inner-mouth width (78/308) over
-        outer width → `mouth_width_ratio`.
+        outer width → `mouth_width_ratio`. Also already scale-invariant,
+        left un-normalized.
       - eyebrow height: mean y of `LEFT/RIGHT_EYEBROW` indices vs. mean y of
-        that eye's landmarks → `eyebrow_height`, plus `brow_symmetry`.
-      - `mouth_elevation`: nose tip (landmark 4) y minus mouth-center y.
-      - hand features from `HandLandmarker` result: `num_hands`, and
-        `hand_raised` (1 if any wrist/middle-fingertip landmark is above a
-        y-threshold relative to face center/top), plus a `hand_near_face`
-        flag (any fingertip landmark within a small radius of the chin/mouth
-        region) — needed to tell `unbothered_lion_chimp` and
-        `wink_smirk_monkey` apart, since both involve a hand near the face.
-      - derived scores exactly as source: `surprise_score`, `smile_score`,
-        `concern_score`, `cheers_score` (products of the above).
-- [ ] **Author the 6 target feature vectors by hand** (JS object, one per
+        that eye's landmarks → `eyebrow_height`, plus `brow_symmetry`. These
+        are raw single distances (not ratios), so both are divided by
+        interocular distance to stay stable across camera distance.
+      - `mouth_elevation`: nose tip (landmark 4) y minus mouth-center y,
+        also interocular-normalized for the same reason.
+      - hand features from `HandLandmarker` result (`.landmarks`, not
+        `.handLandmarks` — verified against the actual API to avoid a known
+        mix-up): `num_hands`, `hand_raised` (1 if any wrist/middle-fingertip
+        landmark is above a y-threshold relative to face top), and
+        `hand_near_face` (any fingertip within an interocular-scaled radius
+        of the chin/mouth region) — needed to tell `unbothered_lion_chimp`
+        and `wink_smirk_monkey` apart.
+      - derived scores: `surprise_score`, `smile_score` — original authoring
+        (see reauthoring note; `concern_score`/`cheers_score` from the
+        unseen source repo were dropped since nothing in this file's own
+        6-target descriptions actually references them).
+- [x] **Author the 6 target feature vectors by hand** (JS object, one per
       meme file above), using the same `feature_keys` as
       `computeFeatures()` outputs. Starting-point logic per image:
       - `praying_monkey`: low `eye_openness` (near 0), low `mouth_openness`,
@@ -235,85 +261,80 @@ your own face during testing.
         trio to watch closely when tuning (see test step below).
       These are starting guesses, not measurements — expect to nudge the
       actual numbers once you're testing live against your own face.
-- [ ] Port `computeSimilarity()`/`findBestMatch()`: same `feature_weights`
-      and `feature_factors` arrays as the source repo to start, same
-      `sum(weights * exp(-|diff| * factors))` scoring — trivial in JS, no
-      numpy needed for 6 reference vectors. Expect to re-weight
-      `hand_near_face` and `eyes_symmetry` higher than the source repo did,
-      since those are what separate our closest-together trio above.
-- [ ] Per live frame: compute the viewer's feature vector, run
-      `findBestMatch()` against the 6 hand-authored vectors, display the
+- [x] **Deviation — in-app calibration instead of hand-edited constants:**
+      live testing confirmed the guessed vectors above don't separate
+      reliably (same meme dominating, flickering, hard trio confused with
+      each other and with the easy poses) — expected, since the last test
+      step below was never actually run before this was flagged. Rather
+      than re-guessing numbers offline again, added a **"Calibrate my
+      poses" flow** in the Mood Meme section: walks through all 6 memes,
+      captures ~1.5s of your real `computeFeatures()` output per pose on
+      "Hold pose & Capture", averages it, and uses that as the target
+      vector — replacing only the guessed values, not the scoring scheme
+      (`FEATURE_WEIGHTS`/`FEATURE_FACTORS`/confidence threshold unchanged).
+      Persists to `localStorage` so it survives reloads; a "Recalibrate"
+      button re-runs it any time.
+- [x] **Deviation — cut down to 4 memes:** after calibration, praying,
+      unbothered, shocked, and flex/pointing all matched reliably, but
+      wink-smirk and pondering stayed unreliable even after recalibration
+      (both share "hand near face, calm-ish mouth" with unbothered, and
+      wink-smirk's `eyes_symmetry` signal proved hard to separate live).
+      Given the scope of this project, descoped `wink_smirk_monkey.jpg` and
+      `pondering_monkey.jpg` — removed both entries from `MOOD_TARGETS` and
+      their now-unused `eyes_symmetry`/`eyebrow_height` weighting from
+      `FEATURE_WEIGHTS`/`FEATURE_FACTORS`. The 4 remaining memes are the
+      ones that were actually verified working. Image files are left in
+      `assets/` unused, not deleted.
+- [x] `computeSimilarity()`/`findBestMatch()`: `sum(weights * exp(-|diff| *
+      factors))` scoring exactly as specified (weights/factors are original
+      starting values, not ported from the unseen source repo — see
+      reauthoring note above) — trivial in JS, no numpy needed for 6
+      reference vectors. `hand_near_face` and `eyes_symmetry` already given
+      weight 1 (full weight) from the start, ready to be tuned further live.
+- [x] Per live frame: compute the viewer's feature vector, run
+      `findBestMatch()` against the 4 calibrated target vectors, display the
       winning meme image + name + match score.
-- [ ] Add a hold/debounce (~400–600ms) so the match doesn't flicker between
-      two close-scoring memes.
-- [ ] **Test, in this order (easy separations first, hard ones last):**
-      1. Praying (eyes closed) vs. shocked (wide eyes+mouth) vs. flex
-         (big smile+hand up) — these three should separate immediately,
-         they differ on multiple features at once.
-      2. The hard trio — unbothered / wink-smirk / pondering, all "hand
-         near face, calm-ish mouth" — this is where you'll spend actual
-         tuning time. Exaggerate the wink deliberately; exaggerate the
-         eyebrow-raise for pondering; keep the chin-hand still and neutral
-         for unbothered. Adjust feature weights/targets until each wins
-         clearly for its intended pose.
-      3. Full run-through, all 6, checking nothing flickers on a resting
-         neutral face between images.
+- [x] Add a hold/debounce (~400–600ms) so the match doesn't flicker between
+      two close-scoring memes. (Implemented at 500ms.)
+- [x] **Test:** praying (eyes closed) vs. unbothered (calm face + hand near
+      chin) vs. shocked (wide eyes + open mouth) vs. flex/pointing (big
+      smile + hand up) — all four separate reliably after calibration and
+      the `findBestMatch`/`hand_raised` fixes above; holding a neutral face
+      doesn't flicker between matches.
 
-**Exit criteria:** all 6 expression/gesture combos reliably match their
-intended image with a clear score gap over the others, and holding a
+**Exit criteria:** all 4 remaining expression/gesture combos reliably match
+their intended image with a clear score gap over the others, and holding a
 neutral face doesn't flicker between matches.
 
 ---
 
-## Phase 3 — "6-7" Hand Counter (~2–3 hrs, most fiddly phase)
+## Phase 3 — "6-7" Hand Counter — CUT
 
-- [ ] Initialize a `HandLandmarker` (same MediaPipe package) with
-      `runningMode: "VIDEO"`, `numHands: 2`.
-- [ ] Per frame, read the wrist landmark's `y` coordinate (landmark index
-      0) for each detected hand. Normalize (0=top,1=bottom of frame).
-- [ ] Maintain a rolling buffer (e.g. last ~1.5s of y-values per hand) and
-      run simple peak/valley detection: a "rep" = a local max followed by
-      a local min (or vice versa) whose amplitude exceeds a minimum
-      threshold (filters out small jitter from natural stillness).
-- [ ] Count a rep only once per full up-down cycle (state machine:
-      `idle → going_up → at_top → going_down → at_bottom → idle`, using
-      direction reversal). This avoids double-counting on noisy frames.
-- [ ] Maintain a rolling 60-second window of timestamped rep events;
-      display "reps in the last 60s" live (recompute each frame from the
-      timestamp list, dropping events older than 60s).
-- [ ] Add a manual "reset counter" button and a big animated number
-      display for the demo moment.
-- [ ] Tune amplitude/timing thresholds against your own arm-pump speed —
-      expect this to be the one part you iterate on the most.
-- [ ] **Test:** do slow deliberate reps, count by hand, compare to the
-      on-screen counter; do it fast; hold still and confirm it doesn't
-      free-count from small movements.
-
-**Exit criteria:** deliberate up-down hand motion counts accurately
-(±1) against a manual count, and stillness doesn't accumulate false counts.
+Dropped from scope entirely. The project ships as two features: Mood Meme
+(Phase 2) and Vibe Check Editor (Phase 1). The home screen, camera-target
+branching, and `section-counter` markup/JS for this phase have been removed
+from `index.html`. Original spec (hand rep counting via wrist-y peak/valley
+detection, rolling 60s window, reset button) is left out of this document
+since it was never built.
 
 ---
 
 ## Phase 4 — Integration & polish (~1–1.5 hrs)
 
-- [ ] Make sure only one MediaPipe task runs at a time (Phase 2 and Phase
-      3 shouldn't both be running full inference when their section isn't
-      visible — pause the `requestAnimationFrame` loop for the hidden
-      section to save CPU/battery).
-- [ ] Consistent visual theme across all three sections (pick a palette,
+- [ ] Consistent visual theme across both sections (pick a palette,
       apply it once — don't hand-tune colors per section).
-- [ ] Landing/home view: a title screen with the three feature names and
+- [ ] Landing/home view: a title screen with the two feature names and
       a "which one do you want" entry point, instead of dumping straight
       into section 1.
-- [ ] Sound/UX pass: transition animations between meme swaps, a little
-      flourish on hitting counter milestones, favicon, page title.
+- [ ] Sound/UX pass: transition animations between meme swaps, favicon,
+      page title.
 - [ ] Error states: no camera permission, no hands/face detected for a
       while, browser lacking `getUserMedia` support — friendly fallback
       messages instead of a blank screen.
-- [ ] Final run-through of all three sections back to back, on the actual
+- [ ] Final run-through of both sections back to back, on the actual
       device/browser you'll demo on.
 
-**Exit criteria:** a stranger can open the page, click through all three
+**Exit criteria:** a stranger can open the page, click through both
 features, and understand what to do without you narrating.
 
 ---
@@ -323,12 +344,11 @@ features, and understand what to do without you narrating.
 If the night gets short, cut in this order and it still demos fine:
 
 1. Phase 4 polish → ship it rougher, narrate over the rough edges live.
-2. Phase 3 accuracy tuning → looser thresholds, call it "vibes-based
-   counting."
-3. Phase 2's hard trio (unbothered / wink-smirk / pondering) → drop to
-   just the 3 easy-to-separate memes (praying, shocked, flex-pointing) if
-   the hand-near-face tuning is eating too much time. Still 3 working
-   matches beats 6 flaky ones.
+2. Phase 2's hard trio (unbothered / wink-smirk / pondering) → drop to
+   just the easy-to-separate memes if the hand-near-face tuning is eating
+   too much time. (This actually happened — see Phase 2's deviation note:
+   wink-smirk and pondering were cut, landing on 4 working memes —
+   praying, unbothered, shocked, flex-pointing — instead of 6 flaky ones.)
 
 Never cut Phase 0 or Phase 1 — they're the cheapest and most reliable wins.
 
