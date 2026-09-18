@@ -51,36 +51,114 @@ your face on screen.
 
 ---
 
-## Phase 1 — Vibe Check Editor (code editor + error sound) (~1 hr)
+## Phase 1 — Vibe Check Editor (Python editor + error sound) (~2–2.5 hrs)
+ 
+Built second (after the camera check) because it has zero camera/CV
+dependency of its own — still a fast, self-contained feature to get fully
+working before moving into the two CV-heavy phases.
+ 
+**Python-only, syntax errors only** (deliberately descoped from full
+linting/undefined-name checks — see discussion above). Uses **Pyodide**
+(real CPython compiled to WebAssembly, running client-side) instead of a
+JS-only parser like Acorn, since the checking has to understand actual
+Python syntax. Sound is a **user-provided MP3 file** (`assets/fahh-sound-effect.mp3`),
+not synthesized — swap out the earlier Web-Audio-oscillator idea.
+ 
+- [x] Load CodeMirror from CDN with **Python mode** (not JS mode) into the
+      "Vibe Check Editor" section, for correct syntax highlighting.
+      Pre-fill with a short broken Python snippet as a starting example.
+      (Also added the closebrackets addon for VS-Code-style auto-closing
+      of `()`/`[]`/`{}`/quotes, per direct user request — not in the
+      original spec but a natural editor-feel addition.)
+- [x] Load CodeMirror's **lint addon/extension** — this is what actually
+      draws the squiggly underline given a list of
+      `{line, ch, message, severity}` diagnostics; we just need to supply
+      that list from Pyodide's errors.
+- [x] Load Pyodide from its CDN script tag and call `loadPyodide()`
+      **immediately on page load** (not gated behind opening the Vibe
+      Check section or clicking anything) — this is the pre-load-before-
+      the-demo requirement. Show a small status indicator ("Python
+      loading…" → "Python ready ✓") somewhere visible on the page so it's
+      obvious when it's safe to start the demo, since the download +
+      init takes a few seconds. (Also added a distinct "Python failed to
+      load — reload the page" error state, so a stuck/failed CDN load is
+      visibly different from a slow one.)
+- [x] Disable/grey out the editor's syntax-checking and Run button until
+      `loadPyodide()` resolves, so nothing silently no-ops while it's
+      still loading.
+- [x] **Live syntax check** (debounced ~300ms after the last keystroke):
+      run `pyodide.runPython("compile(<code>, '<input>', 'exec')")` (or
+      equivalent via `ast.parse`) wrapped so a `SyntaxError` is caught in
+      JS with its `lineno`/`offset`/message intact. Feed that into the
+      lint addon to draw the squiggly line at the actual failing
+      location — not just a generic "there's an error somewhere" banner.
+      (Switched from raw `ast.parse` to `codeop.compile_command` — the
+      same check the real Python REPL uses — because `ast.parse` can't
+      tell "still typing a multi-line block/bracket/string" apart from an
+      actual syntax error, which caused false-positive buzzer triggers on
+      completely ordinary in-progress typing.)
+- [x] **Error-state transition tracking**, same principle as originally
+      planned: only trigger the sound when the code goes from
+      valid→invalid, not on every keystroke while it's already invalid
+      (otherwise it fires constantly while mid-typing a multi-line broken
+      block). Clear the squiggle and reset state the moment it re-parses
+      clean. (Refined further per user testing: the sound decision is now
+      on its own ~1.5s debounce separate from the live squiggle, so it
+      only fires once you've paused typing, not mid-keystroke; and it now
+      fires on every *new distinct* error signature — not just the first
+      valid→invalid flip — while still not repeating for the same
+      unchanged error. The very first lint pass against the pre-filled
+      broken starting snippet is also suppressed from playing the sound,
+      since that's not something the user typed.)
+- [x] **Sound playback**: `<audio id="fahh" src="assets/fahh.mp3">` in the
+      page; on each new syntax error, `fahh.currentTime = 0; fahh.play()`
+      so rapid re-triggers restart cleanly instead of overlapping oddly
+      or getting ignored.
+- [x] **"Run" button** (separate from the live syntax check): executes the
+      current code via `pyodide.runPythonAsync(code)`, with
+      `pyodide.setStdout`/`setStderr` wired to append into an on-page
+      output panel. A successful run shows printed output; a runtime
+      exception (as opposed to a syntax error caught live while typing)
+      shows the real Python traceback in that same output panel, styled
+      as an error. (Known accepted limitation, documented in the UI: no
+      Web Worker, so a genuine infinite loop freezes the tab — a caption
+      under the Run button says so. Also confirmed `input()` doesn't work
+      since Pyodide has no wired-up stdin; user declined a browser-prompt
+      workaround, so this stays unimplemented.)
+- [x] Add a small counter: "syntax errors triggered: N" for comic effect
+      (kept from the original plan).
+- [x] **Test, in this order:**
+      1. Load the page fresh, confirm the "Python loading…" → "ready"
+         indicator actually flips, and that typing/Run are inert before
+         it does.
+      2. Type valid Python (no squiggle, silence), then break it a few
+         different ways — bad indentation, unclosed bracket/paren,
+         dangling `:` , stray keyword — confirm the squiggle appears at
+         the right line and the sound fires exactly once per new error.
+      3. Fix the error back to valid — confirm the squiggle clears and no
+         extra sound fires.
+      4. Hit Run on valid code that prints something — confirm output
+         shows up in the panel.
+      5. Hit Run on code that's valid syntax but throws at runtime (e.g.
+         `1/0`) — confirm the real traceback shows in the output panel
+         (this is a separate path from the live squiggle/sound, since
+         it's not a syntax error).
+      6. Reload the page, immediately mash the keyboard before the
+         "ready" indicator flips — confirm nothing breaks or throws in
+         the console while Pyodide is still loading.
+      (All verified by user via live testing, including two rounds of bug
+      reports that were fixed and reconfirmed: a broken gutter/line-number
+      layout from a hidden-container CodeMirror init, a dark-theme pass,
+      and the false-positive sound triggering on normal multi-line typing.)
+**Exit criteria:** Pyodide finishes loading automatically on page open
+with a visible ready-state; typing broken Python reliably draws an
+accurate squiggly line and plays the FAHHH sound exactly once per new
+error; fixing the code clears both; Run executes valid code and shows
+real output, and shows a real traceback for runtime (non-syntax) errors.
+ 
 
-Built first because it has zero camera/CV dependency — fastest guaranteed
-win, good for morale and for demoing early.
-
-- [ ] Load CodeMirror from CDN (JS mode) into the "Vibe Check Editor"
-      section. Pre-fill with a short broken snippet as a starting example.
-- [ ] Load Acorn from CDN for parsing.
-- [ ] On every keystroke (debounced ~300ms) or on an explicit "Run" button,
-      run `acorn.parse(code, {ecmaVersion: 2020})` in a try/catch.
-- [ ] On success: green border / "looks clean" status text.
-- [ ] On `SyntaxError`: red border, show the error message near the line,
-      and trigger the sound (see below). Don't spam the sound on every
-      keystroke while mid-typing a valid partial statement — only re-fire
-      when the error *state* changes from valid→invalid, not on every
-      invalid keystroke.
-- [ ] Build the "FAHHH" sound with the Web Audio API: a short descending
-      sawtooth/square oscillator sweep (e.g. 400Hz → 80Hz over ~400ms) plus
-      a touch of distortion — a synthesized "wrong buzzer," not a ripped
-      audio clip (avoids copyright issues and any asset loading).
-- [ ] Add a small counter: "syntax errors triggered: N" for comic effect.
-- [ ] **Test:** type valid JS (silence, green), then break it — comma
-      splice, unmatched bracket, stray keyword — confirm the sound fires
-      once per new error, and clears when fixed.
-
-**Exit criteria:** typing broken JS reliably triggers the buzzer sound and
-visual error state; fixing it clears both.
-
+ 
 ---
-
 ## Phase 2 — Mood Meme (face expression → meme image) (~1.5–2 hrs)
 
 Ported from a reference implementation (github.com/kristelTech/make_me_a_meme,

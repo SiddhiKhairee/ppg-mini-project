@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Meme Machine</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/lint/lint.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/lint/lint.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -95,35 +102,109 @@
     transform: scaleX(-1);
   }
 
-  /* --- Fake IDE panel --- */
-  .fake-ide {
-    display: flex;
-    background: #1e1e1e;
+  /* --- Python status badge --- */
+  #py-status-badge {
+    position: fixed;
+    top: 0.75rem;
+    right: 1rem;
+    background: #1b1b1b;
+    border: 1px solid #444;
+    color: #ccc;
+    padding: 0.4rem 0.8rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    z-index: 10;
+  }
+  #py-status-badge.error {
+    background: #3a1414;
+    border-color: #a33;
+    color: #ffb3b3;
+  }
+
+  /* --- Vibe Check Editor --- */
+  .editor-wrap {
     border: 1px solid #333;
     border-radius: 8px;
     overflow: hidden;
-    font-family: "Consolas", "Menlo", monospace;
     min-height: 320px;
   }
-  .fake-ide .gutter {
-    background: #181818;
-    color: #555;
-    padding: 1rem 0.75rem;
-    text-align: right;
-    user-select: none;
-    line-height: 1.6;
+  .editor-wrap.disabled {
+    opacity: 0.5;
+    pointer-events: none;
   }
-  .fake-ide .code-area {
-    padding: 1rem;
+  .CodeMirror {
+    height: 320px;
+    font-family: "Consolas", "Menlo", monospace;
+    background: #1e1e1e;
     color: #d4d4d4;
-    line-height: 1.6;
-    flex: 1;
-    white-space: pre;
   }
-  .fake-ide .comment { color: #6a9955; }
+  .CodeMirror-gutters {
+    background: #181818;
+    border-right: 1px solid #333;
+  }
+  .CodeMirror-linenumber {
+    color: #666;
+    padding: 0 8px 0 12px;
+  }
+  .CodeMirror pre.CodeMirror-line,
+  .CodeMirror pre.CodeMirror-line-like {
+    padding: 0 12px;
+  }
+  .CodeMirror-cursor {
+    border-left: 1px solid #eee;
+  }
+  .CodeMirror-selected {
+    background: #3a3d5c !important;
+  }
+  .cm-keyword { color: #569cd6; }
+  .cm-def, .cm-variable-2 { color: #dcdcaa; }
+  .cm-string { color: #ce9178; }
+  .cm-number { color: #b5cea8; }
+  .cm-comment { color: #6a9955; }
+  .cm-operator { color: #d4d4d4; }
+  #run-btn {
+    margin-top: 1rem;
+    font-size: 1rem;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    border: none;
+    background: #4a4af0;
+    color: white;
+    cursor: pointer;
+  }
+  #run-btn:disabled {
+    background: #333;
+    color: #888;
+    cursor: not-allowed;
+  }
+  .run-caption {
+    display: block;
+    margin-top: 0.4rem;
+    color: #888;
+    font-size: 0.8rem;
+  }
+  #python-output {
+    margin-top: 1rem;
+    padding: 0.75rem;
+    background: #1b1b1b;
+    border-radius: 6px;
+    min-height: 3rem;
+    white-space: pre-wrap;
+    font-family: "Consolas", "Menlo", monospace;
+    font-size: 0.9rem;
+  }
+  #python-output.error { color: #ff8080; }
+  #error-counter {
+    display: block;
+    margin-top: 1rem;
+    color: #999;
+    font-size: 0.85rem;
+  }
 </style>
 </head>
 <body>
+
+<div id="py-status-badge">Python loading…</div>
 
 <!-- Home / title card -->
 <div id="home" class="view active">
@@ -151,10 +232,17 @@
   <button class="back-btn" data-back>← back</button>
   <div class="section-body">
     <h2>Are you coding yet?</h2>
-    <div class="fake-ide">
-      <div class="gutter">1<br>2<br>3<br>4<br>5</div>
-      <div class="code-area"><span class="comment">// editor goes here (Phase 1)</span></div>
+    <div class="editor-wrap disabled" id="editor-wrap">
+      <textarea id="python-editor">def greet(name)
+    print("hello, " + name)
+
+greet("world")
+</textarea>
     </div>
+    <button id="run-btn" disabled>Run</button>
+    <span class="run-caption">Note: an infinite loop will freeze the tab; reload if that happens.</span>
+    <pre id="python-output"></pre>
+    <span id="error-counter">syntax errors triggered: 0</span>
   </div>
 </div>
 
@@ -167,6 +255,8 @@
     <div id="camera-preview-wrap-counter" class="camera-preview-wrap"></div>
   </div>
 </div>
+
+<audio id="fahh-audio" src="assets/fahh-sound-effect.mp3" preload="auto"></audio>
 
 <script>
   // --- View switching ---
@@ -184,6 +274,11 @@
         const statusId = btn.dataset.target === 'section-mood' ? 'camera-status-mood' : 'camera-status-counter';
         const wrapId = btn.dataset.target === 'section-mood' ? 'camera-preview-wrap-mood' : 'camera-preview-wrap-counter';
         initCamera(statusId, wrapId);
+      }
+      if (btn.dataset.target === 'section-editor') {
+        // CodeMirror is created while this section is display:none, so it can't
+        // measure the gutter correctly until it's actually visible — refresh here.
+        cm.refresh();
       }
     });
   });
@@ -242,6 +337,162 @@
     requestAnimationFrame(() => drawLiveLoop(token));
   }
 
+  // --- Vibe Check Editor (Python via Pyodide) ---
+  let pyodide = null;
+  const statusBadge = document.getElementById('py-status-badge');
+  const editorWrap = document.getElementById('editor-wrap');
+  const runBtn = document.getElementById('run-btn');
+  const outputEl = document.getElementById('python-output');
+  const errorCounterEl = document.getElementById('error-counter');
+  const fahhAudio = document.getElementById('fahh-audio');
+
+  let errorCount = 0;
+  let lastErrorSignature = null; // null = currently valid/incomplete; otherwise "line:col:msg" of the last-fired error
+  let hasTyped = false; // becomes true only on a real user edit, not the initial pre-filled snippet
+
+  function setEditorEnabled(enabled) {
+    editorWrap.classList.toggle('disabled', !enabled);
+    runBtn.disabled = !enabled;
+  }
+
+  // Single source of truth for "is this Python valid", shared by the live
+  // squiggle (fast, addon-driven) and the sound decision (slow, our own
+  // debounce below) — but each of those two consumers owns its own timing
+  // and state, so neither can race or double-fire the other.
+  //
+  // Uses codeop.compile_command (the same check the real interactive
+  // interpreter uses) instead of a bare ast.parse, specifically because it
+  // distinguishes "incomplete so far, still needs more lines" (e.g. a `for`
+  // header with no body yet, an unclosed bracket, an unterminated string —
+  // all normal mid-typing states) from an actual syntax error. A bare
+  // ast.parse can't tell those apart, which caused the buzzer to fire on
+  // completely ordinary in-progress typing of any multi-line construct.
+  function checkPythonSyntax(text) {
+    if (!pyodide) return { valid: true }; // not ready yet — inert until Pyodide loads
+
+    pyodide.globals.set('code', text);
+    pyodide.runPython(`
+import codeop
+try:
+    _compiled = codeop.compile_command(code, '<input>', 'exec')
+    result = ('ok', None, None, None) if _compiled is not None else ('incomplete', None, None, None)
+except SyntaxError as e:
+    result = ('error', e.lineno, e.offset, str(e.msg))
+except (ValueError, OverflowError) as e:
+    result = ('error', None, None, str(e))
+`);
+
+    // Python -> JS hand-off, with explicit PyProxy cleanup (pyodide stays
+    // open for the whole pre-load-and-wait window, so every check must
+    // clean up its own proxy or it leaks for as long as the tab is open).
+    const resultProxy = pyodide.globals.get('result');
+    let result = null;
+    if (resultProxy && typeof resultProxy.toJs === 'function') {
+      result = resultProxy.toJs();
+      resultProxy.destroy();
+    }
+
+    const [status, lineno, offset, msg] = result;
+    // 'incomplete' (still typing a block/bracket/string) counts as valid —
+    // it's not a mistake, just not finished yet.
+    if (status !== 'error') return { valid: true };
+    return { valid: false, lineno, offset, msg };
+  }
+
+  CodeMirror.registerHelper('lint', 'python', function (text) {
+    const check = checkPythonSyntax(text);
+    if (check.valid) return [];
+
+    // offset can legitimately be None (e.g. unexpected EOF, unterminated
+    // string) — default to column 0 instead of producing NaN.
+    const col = (check.offset === null || check.offset === undefined) ? 0 : Math.max(0, check.offset - 1);
+    const line = Math.max(0, (check.lineno || 1) - 1); // CodeMirror is 0-indexed
+
+    return [{
+      from: CodeMirror.Pos(line, col),
+      to: CodeMirror.Pos(line, col + 1),
+      message: check.msg,
+      severity: 'error',
+    }];
+  });
+
+  const cm = CodeMirror.fromTextArea(document.getElementById('python-editor'), {
+    mode: 'python',
+    lineNumbers: true,
+    gutters: ['CodeMirror-linenumbers', 'CodeMirror-lint-markers'],
+    lint: { delay: 300 },
+    autoCloseBrackets: true,
+  });
+
+  // Sound trigger: only decided after you've paused typing for a bit, so it
+  // doesn't fire mid-keystroke while you're still finishing a line. This is
+  // deliberately a longer, separate debounce from the live squiggle above.
+  const SOUND_SETTLE_MS = 1500;
+  let soundTimer = null;
+
+  cm.on('change', (instance, change) => {
+    if (change.origin !== 'setValue') hasTyped = true;
+
+    clearTimeout(soundTimer);
+    soundTimer = setTimeout(() => {
+      if (!hasTyped) return;
+      const check = checkPythonSyntax(cm.getValue());
+      if (check.valid) {
+        lastErrorSignature = null;
+        return;
+      }
+      // Fire on every genuinely new error — not just the first valid->invalid
+      // flip — but not repeatedly for the exact same error sitting unchanged.
+      const signature = `${check.lineno}:${check.offset}:${check.msg}`;
+      if (signature !== lastErrorSignature) {
+        lastErrorSignature = signature;
+        errorCount++;
+        errorCounterEl.textContent = `syntax errors triggered: ${errorCount}`;
+        fahhAudio.currentTime = 0;
+        fahhAudio.play();
+      }
+    }, SOUND_SETTLE_MS);
+  });
+
+  async function runCode() {
+    const code = cm.getValue();
+    runBtn.disabled = true;
+    runBtn.textContent = 'Running…';
+    outputEl.textContent = '';
+    outputEl.classList.remove('error');
+    pyodide.setStdout({ batched: (s) => { outputEl.textContent += s + '\n'; } });
+    pyodide.setStderr({ batched: (s) => { outputEl.textContent += s + '\n'; } });
+    try {
+      await pyodide.runPythonAsync(code);
+    } catch (err) {
+      outputEl.classList.add('error');
+      outputEl.textContent += err.message; // Pyodide's message already contains the real traceback
+    } finally {
+      runBtn.disabled = false;
+      runBtn.textContent = 'Run';
+    }
+  }
+
+  runBtn.addEventListener('click', runCode);
+
+  async function bootPyodide() {
+    if (typeof loadPyodide !== 'function') {
+      // the CDN <script> tag itself failed to load
+      statusBadge.textContent = 'Python failed to load — reload the page';
+      statusBadge.classList.add('error');
+      return;
+    }
+    try {
+      pyodide = await loadPyodide();
+      statusBadge.textContent = 'Python ready ✓';
+      setEditorEnabled(true);
+      cm.setOption('lint', { delay: 300 }); // re-trigger an initial lint pass now that pyodide is ready
+    } catch (err) {
+      statusBadge.textContent = 'Python failed to load — reload the page';
+      statusBadge.classList.add('error');
+    }
+  }
+  bootPyodide();
 </script>
 
 </body>
